@@ -1,19 +1,24 @@
 'use client';
 
+import { useLayoutEffect, useRef, useCallback } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { FreeMode } from 'swiper/modules';
+import type { Swiper as SwiperClass } from 'swiper';
 import 'swiper/css';
 import 'swiper/css/free-mode';
 import { CARDS } from '../consts/card';
 import { FlyingCardOverlay } from './FlyingCardOverlay';
 import { useCardSelection, MAX_SELECTION } from '../hooks/useCardSelection';
 
+const SWIPER_FILL_DURATION = 300;
+
+type SlideSnapshot = { el: HTMLElement; left: number };
+
 export default function CardSwiper() {
   const {
     selectedIds,
     flyingCard,
     flyingIds,
-    collapsingIds,
     exitingFromSelected,
     swiperCards,
     isMaxSelected,
@@ -22,6 +27,49 @@ export default function CardSwiper() {
     handleFlyingDone,
     handleDeselect,
   } = useCardSelection();
+
+  const swiperRef = useRef<SwiperClass | null>(null);
+  const prevSnapshotRef = useRef<SlideSnapshot[]>([]);
+
+  // 클릭 시점에 현재 슬라이드 위치를 스냅샷 → React 상태 업데이트 전에 기록
+  const handleSelectWithFlip = useCallback(
+    (card: (typeof CARDS)[number], e: React.MouseEvent) => {
+      const swiper = swiperRef.current;
+      if (swiper) {
+        prevSnapshotRef.current = swiper.slides.map((el) => ({
+          el,
+          left: el.getBoundingClientRect().left,
+        }));
+      }
+      handleSelect(card, e);
+    },
+    [handleSelect],
+  );
+
+  // DOM 업데이트 직후(paint 전) FLIP 애니메이션 적용
+  useLayoutEffect(() => {
+    const snapshot = prevSnapshotRef.current;
+    if (!snapshot.length) return;
+    prevSnapshotRef.current = [];
+
+    // 살아있는 슬라이드에 역방향 오프셋 적용 (이동 전 위치로 순간이동)
+    snapshot.forEach(({ el, left }) => {
+      if (!el.isConnected) return;
+      const dx = left - el.getBoundingClientRect().left;
+      if (Math.abs(dx) < 1) return;
+      el.style.transition = 'none';
+      el.style.transform = `translateX(${dx}px)`;
+    });
+
+    // 다음 프레임에 transition 추가 → 원래 위치(0)로 부드럽게 이동
+    requestAnimationFrame(() => {
+      snapshot.forEach(({ el }) => {
+        if (!el.isConnected) return;
+        el.style.transition = `transform ${SWIPER_FILL_DURATION}ms ease`;
+        el.style.transform = '';
+      });
+    });
+  }, [swiperCards.length]);
 
   return (
     <>
@@ -53,38 +101,26 @@ export default function CardSwiper() {
             slidesPerView='auto'
             spaceBetween={20}
             className='w-full px-8'
+            onSwiper={(swiper) => {
+              swiperRef.current = swiper;
+            }}
           >
-            {swiperCards.map((card) => {
-              const isFlying = flyingIds.has(card.id);
-              const isCollapsing = collapsingIds.has(card.id);
-              return (
-                <SwiperSlide
-                  key={card.id}
-                  style={{
-                    width: isCollapsing ? 0 : 220,
-                    overflow: 'hidden',
-                    transition: 'width 0.3s ease',
-                    opacity: isFlying || isCollapsing ? 0 : 1,
-                  }}
+            {swiperCards.map((card) => (
+              <SwiperSlide key={card.id} style={{ width: 220 }}>
+                <button
+                  onClick={(e) => handleSelectWithFlip(card, e)}
+                  disabled={isMaxSelected || flyingIds.has(card.id)}
+                  className={`w-full rounded-2xl bg-linear-to-br ${card.color} p-px cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
                 >
-                  {/* width 고정: 슬라이드 너비가 줄어도 내부 콘텐츠가 줄바꿈되지 않게 */}
-                  <div style={{ width: 220, minWidth: 220 }}>
-                    <button
-                      onClick={(e) => handleSelect(card, e)}
-                      disabled={isMaxSelected || isFlying || isCollapsing}
-                      className={`w-full rounded-2xl bg-linear-to-br ${card.color} p-px cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
-                    >
-                      <div className='rounded-2xl bg-white/10 backdrop-blur-sm p-6 flex flex-col items-center gap-4 hover:brightness-110 transition-[filter] duration-200'>
-                        <span className='text-6xl'>{card.emoji}</span>
-                        <p className='text-lg font-semibold text-white'>
-                          {card.title}
-                        </p>
-                      </div>
-                    </button>
+                  <div className='rounded-2xl bg-white/10 backdrop-blur-sm p-6 flex flex-col items-center gap-4 hover:brightness-110 transition-[filter] duration-200'>
+                    <span className='text-6xl'>{card.emoji}</span>
+                    <p className='text-lg font-semibold text-white'>
+                      {card.title}
+                    </p>
                   </div>
-                </SwiperSlide>
-              );
-            })}
+                </button>
+              </SwiperSlide>
+            ))}
           </Swiper>
         </div>
 
