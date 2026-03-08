@@ -37,7 +37,7 @@ export default function CardSwiper() {
         <div className='flex flex-col gap-4'>
           <div className='px-8 flex items-center justify-between'>
             <h2 className='text-3xl font-bold text-gray-800 dark:text-gray-100'>
-              카드를 선택하세요
+              Select Your Cards
             </h2>
             <span className='text-sm text-gray-500 dark:text-gray-400'>
               {selectedIds.length} / {MAX_SELECTION}
@@ -86,7 +86,9 @@ export default function CardSwiper() {
               return (
                 <div
                   key={i}
-                  ref={(el) => { slotRefs.current[i] = el; }}
+                  ref={(el) => {
+                    slotRefs.current[i] = el;
+                  }}
                   style={{ width: 160, height: 144 }}
                 >
                   {card ? (
