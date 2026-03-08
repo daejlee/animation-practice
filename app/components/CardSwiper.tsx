@@ -1,73 +1,118 @@
 'use client';
 
-import { useState } from 'react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { FreeMode } from 'swiper/modules';
 import 'swiper/css';
 import 'swiper/css/free-mode';
 import { CARDS } from '../consts/card';
+import { FlyingCardOverlay } from './FlyingCardOverlay';
+import { useCardSelection, MAX_SELECTION } from '../hooks/useCardSelection';
 
 export default function CardSwiper() {
-  const [selected, setSelected] = useState<number | null>(null);
+  const {
+    selectedIds,
+    flyingCard,
+    exitingFromSelected,
+    swiperCards,
+    isMaxSelected,
+    slotRefs,
+    handleSelect,
+    handleFlyingDone,
+    handleDeselect,
+  } = useCardSelection();
 
   return (
-    <div className='flex flex-col items-center gap-8 py-12'>
-      <h2 className='text-3xl font-bold text-gray-800 dark:text-gray-100'>
-        카드 스와이퍼 예제
-      </h2>
-
-      <Swiper
-        modules={[FreeMode]}
-        freeMode
-        loop
-        grabCursor
-        slidesPerView='auto'
-        spaceBetween={20}
-        className='w-full px-8'
-      >
-        {CARDS.map((card) => (
-          <SwiperSlide key={card.id} style={{ width: 220 }}>
-            <button
-              onClick={() => setSelected(card.id)}
-              className={`w-full rounded-2xl bg-gradient-to-br ${card.color} p-px cursor-pointer`}
-            >
-              <div
-                className={`rounded-2xl bg-white/10 backdrop-blur-sm p-6 flex flex-col items-center gap-4 transition-all duration-200 ${
-                  selected === card.id
-                    ? 'ring-4 ring-white ring-offset-2'
-                    : 'hover:brightness-110'
-                }`}
-              >
-                <span className='text-6xl'>{card.emoji}</span>
-                <p className='text-lg font-semibold text-white'>{card.title}</p>
-                {selected === card.id && (
-                  <span className='text-xs font-bold bg-white text-gray-800 px-3 py-1 rounded-full'>
-                    선택됨 ✓
-                  </span>
-                )}
-              </div>
-            </button>
-          </SwiperSlide>
-        ))}
-      </Swiper>
-
-      {selected && (
-        <div className='mt-2 text-center'>
-          <p className='text-gray-500 dark:text-gray-400 text-sm'>
-            선택한 카드
-          </p>
-          <p className='text-2xl font-bold text-gray-800 dark:text-gray-100'>
-            {CARDS.find((c) => c.id === selected)?.emoji}{' '}
-            {CARDS.find((c) => c.id === selected)?.title}
-          </p>
-          <button
-            onClick={() => setSelected(null)}
-            className='mt-2 text-xs text-gray-400 underline hover:text-gray-600'
-          >
-            선택 해제
-          </button>
-        </div>
+    <>
+      {flyingCard && (
+        <FlyingCardOverlay
+          card={flyingCard.card}
+          fromRect={flyingCard.fromRect}
+          toRect={flyingCard.toRect}
+          onDone={handleFlyingDone}
+        />
       )}
-    </div>
+
+      <div className='flex flex-col gap-10 py-12'>
+        {/* 카드 캐러셀 */}
+        <div className='flex flex-col gap-4'>
+          <div className='px-8 flex items-center justify-between'>
+            <h2 className='text-3xl font-bold text-gray-800 dark:text-gray-100'>
+              카드를 선택하세요
+            </h2>
+            <span className='text-sm text-gray-500 dark:text-gray-400'>
+              {selectedIds.length} / {MAX_SELECTION}
+            </span>
+          </div>
+
+          <Swiper
+            modules={[FreeMode]}
+            freeMode
+            grabCursor={!isMaxSelected}
+            slidesPerView='auto'
+            spaceBetween={20}
+            className='w-full px-8'
+          >
+            {swiperCards.map((card) => (
+              <SwiperSlide key={card.id} style={{ width: 220 }}>
+                <button
+                  onClick={(e) => handleSelect(card, e)}
+                  disabled={isMaxSelected}
+                  className={`w-full rounded-2xl bg-linear-to-br ${card.color} p-px cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  <div className='rounded-2xl bg-white/10 backdrop-blur-sm p-6 flex flex-col items-center gap-4 hover:brightness-110 transition-[filter] duration-200'>
+                    <span className='text-6xl'>{card.emoji}</span>
+                    <p className='text-lg font-semibold text-white'>
+                      {card.title}
+                    </p>
+                  </div>
+                </button>
+              </SwiperSlide>
+            ))}
+          </Swiper>
+        </div>
+
+        {/* 선택된 카드 슬롯 (고정 3개) */}
+        <div className='flex flex-col gap-4 px-8'>
+          <h3 className='text-xl font-semibold text-gray-700 dark:text-gray-300'>
+            선택된 카드
+          </h3>
+
+          <div className='flex gap-4 items-start'>
+            {Array.from({ length: MAX_SELECTION }).map((_, i) => {
+              const id = selectedIds[i];
+              const card = id != null ? CARDS.find((c) => c.id === id) : null;
+              const isExiting = id != null && exitingFromSelected.has(id);
+
+              return (
+                <div
+                  key={i}
+                  ref={(el) => { slotRefs.current[i] = el; }}
+                  style={{ width: 160, height: 144 }}
+                >
+                  {card ? (
+                    <button
+                      onClick={() => handleDeselect(card.id)}
+                      className={`w-full h-full rounded-2xl bg-linear-to-br ${card.color} p-px cursor-pointer ${isExiting ? 'card-exit-selected' : ''}`}
+                    >
+                      <div className='relative w-full h-full rounded-2xl bg-white/10 backdrop-blur-sm flex flex-col items-center justify-center gap-2 hover:brightness-110 transition-[filter] duration-200'>
+                        <span className='absolute top-2 right-2 text-white/50 text-xs leading-none'>
+                          ✕
+                        </span>
+                        <span className='text-4xl'>{card.emoji}</span>
+                        <p className='text-sm font-semibold text-white'>
+                          {card.title}
+                        </p>
+                      </div>
+                    </button>
+                  ) : (
+                    <div className='w-full h-full rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700' />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
